@@ -1,5 +1,8 @@
 # AuthzSwarm
 
+> Runs a swarm of security checks against your own apps and reports the bugs it finds.
+
+
 A multi-agent, **authorized-defensive-security** testing harness. Point it at an
 application **you own** to find common web vulnerabilities before an attacker
 does. It coordinates a swarm of specialized checker agents — each probing one

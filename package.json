@@ -1,7 +1,7 @@
 {
   "name": "authzswarm",
   "version": "0.1.0",
-  "description": "A multi-agent, authorized-defensive-security testing harness. Point it at YOUR OWN application to find common web vulnerabilities before attackers do. Detect-and-report only; enforces an allowlist and an authorization acknowledgement.",
+  "description": "Runs a swarm of security checks against your own apps and reports the bugs it finds.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
