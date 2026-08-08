@@ -1,0 +1,10 @@
+{
+  "_comment": "AUTHORIZED-USE ONLY. AuthzSwarm refuses to scan any host not listed here. Add ONLY hosts you own or are explicitly authorized to test. Entries match by hostname, or hostname:port for a port-specific grant. The defaults below cover only localhost and the bundled demo target.",
+  "allowedTargets": [
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "localhost:3000",
+    "127.0.0.1:3000"
+  ]
+}

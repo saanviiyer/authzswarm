@@ -1,0 +1,11 @@
+node_modules
+dist
+reports
+.git
+.gitignore
+.env
+*.log
+.authzswarm-ack.json
+npm-debug.log*
+Dockerfile
+.dockerignore

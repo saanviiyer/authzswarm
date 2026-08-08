@@ -1,0 +1,51 @@
+{
+  "name": "authzswarm",
+  "version": "0.1.0",
+  "description": "A multi-agent, authorized-defensive-security testing harness. Point it at YOUR OWN application to find common web vulnerabilities before attackers do. Detect-and-report only; enforces an allowlist and an authorization acknowledgement.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "authzswarm": "dist/src/cli.js"
+  },
+  "files": [
+    "dist",
+    "demo-target",
+    "authorized-targets.json",
+    "README.md",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "security",
+    "dast",
+    "web-security",
+    "pentest",
+    "vulnerability-scanner",
+    "authorized",
+    "defensive-security",
+    "appsec",
+    "security-headers",
+    "cli"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "demo:target": "tsx demo-target/server.ts",
+    "scan": "tsx src/cli.ts",
+    "demo": "tsx scripts/demo.ts",
+    "start": "node dist/src/cli.js",
+    "prepare": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

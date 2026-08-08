@@ -1,0 +1,15 @@
+# deps / build / secrets
+node_modules/
+dist/
+build/
+.vite/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+*.tsbuildinfo
+.authzswarm-ack.json
+report.json
+report.html
+.docker-build.log
