@@ -51,6 +51,7 @@ export interface HttpClient {
     path: string,
     opts?: { manualRedirect?: boolean }
   ): Promise<HttpResponse>;
+  close(reason?: string): void;
 }
 
 export interface ScanReport {
@@ -61,4 +62,5 @@ export interface ScanReport {
   triageMode: "claude" | "mock";
   summary: Record<Severity, number>;
   findings: TriagedFinding[];
+  errors: Array<{ checker: string; message: string }>;
 }

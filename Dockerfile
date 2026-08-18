@@ -25,6 +25,8 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+LABEL org.opencontainers.image.title="AuthzSwarm" \
+      org.opencontainers.image.description="Bounded authorized defensive web scanner"
 
 # Production dependencies only. --ignore-scripts so the `prepare` build hook
 # (which needs devDependencies) does not run in the runtime image.
@@ -56,6 +58,8 @@ RUN mkdir -p /app/reports && chown -R node:node /app
 
 # Run as the built-in unprivileged node user.
 USER node
+
+STOPSIGNAL SIGINT
 
 ENTRYPOINT ["node", "dist/src/cli.js"]
 CMD ["--help"]

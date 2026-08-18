@@ -1,35 +1,49 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { createHash } from "crypto";
 
 const ACK_FILE = ".authzswarm-ack.json";
 
 interface AckRecord {
+  version: 2;
   acknowledged: boolean;
   acknowledgedAt: string;
+  target: string;
+  allowlistDigest: string;
   note: string;
 }
 
-export function hasAcknowledged(cwd = process.cwd()): boolean {
+function digestAllowlist(allowlist: string[]): string {
+  return createHash("sha256").update([...allowlist].sort().join("\n")).digest("hex");
+}
+
+export function hasAcknowledged(target: string, allowlist: string[], cwd = process.cwd()): boolean {
   const file = path.join(cwd, ACK_FILE);
   if (!fs.existsSync(file)) return false;
   try {
     const rec = JSON.parse(fs.readFileSync(file, "utf8")) as AckRecord;
-    return rec.acknowledged === true;
+    return rec.version === 2 && rec.acknowledged === true && rec.target === target &&
+      rec.allowlistDigest === digestAllowlist(allowlist);
   } catch {
     return false;
   }
 }
 
-export function recordAcknowledgement(cwd = process.cwd()): void {
+export function recordAcknowledgement(target: string, allowlist: string[], cwd = process.cwd()): void {
   const file = path.join(cwd, ACK_FILE);
   const rec: AckRecord = {
+    version: 2,
     acknowledged: true,
     acknowledgedAt: new Date().toISOString(),
+    target,
+    allowlistDigest: digestAllowlist(allowlist),
     note:
       "Operator confirmed they own or are explicitly authorized to test targets on the allowlist.",
   };
-  fs.writeFileSync(file, JSON.stringify(rec, null, 2));
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(rec, null, 2), { mode: 0o600 });
+  fs.renameSync(temp, file);
 }
 
 /**
@@ -43,14 +57,16 @@ export function recordAcknowledgement(cwd = process.cwd()): void {
  */
 export async function ensureAuthorizationAck(opts: {
   flagPassed: boolean;
+  target: string;
+  allowlist: string[];
   cwd?: string;
 }): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
 
-  if (hasAcknowledged(cwd)) return;
+  if (hasAcknowledged(opts.target, opts.allowlist, cwd)) return;
 
   if (opts.flagPassed) {
-    recordAcknowledgement(cwd);
+    recordAcknowledgement(opts.target, opts.allowlist, cwd);
     return;
   }
 
@@ -66,7 +82,7 @@ export async function ensureAuthorizationAck(opts: {
       ].join("\n")
     );
     if (answer.trim().toLowerCase() === "yes" || answer.trim().toLowerCase() === "y") {
-      recordAcknowledgement(cwd);
+      recordAcknowledgement(opts.target, opts.allowlist, cwd);
       return;
     }
     throw new Error("Authorization not confirmed. Aborting.");

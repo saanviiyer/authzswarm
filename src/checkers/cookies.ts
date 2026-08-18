@@ -31,7 +31,7 @@ export const cookiesChecker: Checker = {
           title: `Cookie "${name}" missing ${missing.join(" and ")} flag${
             missing.length > 1 ? "s" : ""
           }`,
-          evidence: `Set-Cookie: ${cookie.trim().slice(0, 200)}`,
+          evidence: `Set-Cookie: ${name}=[REDACTED]; missing ${missing.join(" and ")}`,
           recommendation: `Set the ${missing.join(
             " and "
           )} attribute(s) on session/sensitive cookies to protect them from theft and script access.`,

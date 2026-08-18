@@ -71,10 +71,7 @@ export const exposedPathsChecker: Checker = {
         category: this.category,
         severity: rule.severity,
         title: rule.title,
-        evidence: `GET ${res.url} returned 200 (${res.body.length} bytes). Snippet: ${res.body
-          .slice(0, 120)
-          .replace(/\s+/g, " ")
-          .trim()}`,
+        evidence: `GET ${res.url} returned 200 (${res.body.length} bytes) and matched the expected file signature. Response content omitted to avoid leaking secrets.`,
         recommendation: rule.recommendation,
         url: res.url,
       });

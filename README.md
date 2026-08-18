@@ -50,16 +50,28 @@ no credential stuffing, nothing designed to damage or persist.
    hostname, or by `hostname:port` for a port-specific grant. You maintain this
    file.
 
-2. **Authorization acknowledgement.** On the first run you must confirm you own
-   or are authorized to test the target — either interactively, or with the
-   `--i-am-authorized` flag. The confirmation is recorded once in
-   `.authzswarm-ack.json`.
+2. **Target-bound authorization acknowledgement.** You must confirm you own or
+   are authorized to test the selected target — either interactively, or with
+   `--i-am-authorized`. The local acknowledgement is bound to that exact origin
+   and a digest of the current allowlist. Changing either requires confirmation
+   again. The record is written atomically with owner-only permissions.
 
-3. **Rate limiting / politeness.** The HTTP client throttles itself: a low
+3. **Network containment.** Every request stays on the authorized origin.
+   Redirects to another origin are never followed, DNS is resolved once and
+   pinned for the scan to prevent rebinding, response bodies and redirect depth
+   are capped, and non-public DNS results are rejected unless the target was
+   explicitly given as localhost/an IP literal or has a per-target `private:`
+   allowlist grant.
+
+4. **Rate limiting / politeness.** The HTTP client throttles itself: a low
    default concurrency (2 in-flight requests) and a minimum delay between
-   requests (250ms). These brakes keep it well below anything resembling a
-   denial-of-service. You can raise them with `--concurrency` / `--delay` — doing
-   so is your responsibility, on systems you own.
+   requests (250ms), at most 8 concurrent requests, and at most 100 requests per
+   scan. Delay and timeout inputs also have hard safe bounds.
+
+5. **Redacted, honest reporting.** Common credentials, cookie values, and
+   sensitive query parameters are redacted before terminal output, files, or
+   optional LLM triage. A checker failure marks the scan incomplete and exits
+   non-zero instead of reporting a misleading clean result.
 
 ## Requirements
 
@@ -181,6 +193,11 @@ node dist/src/cli.js scan http://localhost:3000 --i-am-authorized
    }
    ```
 
+   For an authorized internal hostname that resolves to a private address, use
+   an explicit entry such as `"private:staging.internal.example:8443"`. This
+   exception applies only to that hostname/port and does not weaken redirect or
+   DNS pinning controls.
+
 2. Run the scan:
 
    ```bash
@@ -206,8 +223,8 @@ authzswarm scan <target-url> [options]
   --out <dir>           Output directory for report.json / report.html
 ```
 
-The process exits non-zero when any `high` or `critical` finding is present, so
-you can gate CI on it.
+The process exits non-zero when any `high` or `critical` finding is present, or
+when a checker fails and the scan is incomplete, so you can gate CI on it.
 
 ## LLM-assisted triage (optional)
 

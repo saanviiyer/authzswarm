@@ -6,7 +6,7 @@
  */
 import { spawn } from "child_process";
 import * as path from "path";
-import { loadAllowlist, assertAuthorized } from "../src/allowlist";
+import { loadAllowlist, assertAuthorized, isPrivateNetworkAuthorized } from "../src/allowlist";
 import { ensureAuthorizationAck } from "../src/ack";
 import { runScan } from "../src/orchestrator";
 import { printReport, writeReports } from "../src/report";
@@ -29,11 +29,12 @@ async function waitForTarget(url: string, timeoutMs = 15000): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const repoRoot = path.resolve(__dirname, "..");
-  const serverPath = path.join(repoRoot, "demo-target", "server.ts");
+  const parent = path.resolve(__dirname, "..");
+  const repoRoot = path.basename(parent) === "dist" ? path.resolve(parent, "..") : parent;
+  const serverPath = path.join(repoRoot, "dist", "demo-target", "server.js");
 
   process.stdout.write("Starting bundled vulnerable demo target...\n");
-  const child = spawn("npx", ["tsx", serverPath], {
+  const child = spawn(process.execPath, [serverPath], {
     cwd: repoRoot,
     env: { ...process.env, PORT: String(PORT) },
     stdio: ["ignore", "inherit", "inherit"],
@@ -56,10 +57,11 @@ async function main(): Promise<void> {
     const allowlist = loadAllowlist(repoRoot);
     const baseUrl = assertAuthorized(TARGET, allowlist);
     // The demo is an authorized local target: acknowledge non-interactively.
-    await ensureAuthorizationAck({ flagPassed: true, cwd: repoRoot });
+    await ensureAuthorizationAck({ flagPassed: true, target: baseUrl, allowlist, cwd: repoRoot });
 
     const report = await runScan(baseUrl, {
       onProgress: (msg) => process.stderr.write(`${msg}\n`),
+      allowPrivateNetwork: isPrivateNetworkAuthorized(baseUrl, allowlist),
     });
     printReport(report);
 
@@ -71,6 +73,9 @@ async function main(): Promise<void> {
         `${report.summary.critical} critical, ${report.summary.high} high, ` +
         `${report.summary.medium} medium, ${report.summary.low} low.\n`
     );
+    if (report.errors.length > 0) {
+      throw new Error(`Demo scan incomplete: ${report.errors.length} checker(s) failed`);
+    }
   } finally {
     shutdown();
   }

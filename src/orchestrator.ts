@@ -8,6 +8,7 @@ import {
   TriagedFinding,
   CheckerContext,
 } from "./types";
+import { redactText, sanitizeFinding } from "./redact";
 
 export interface OrchestratorOptions {
   concurrency?: number;
@@ -15,6 +16,8 @@ export interface OrchestratorOptions {
   timeoutMs?: number;
   triage?: boolean;
   onProgress?: (msg: string) => void;
+  signal?: AbortSignal;
+  allowPrivateNetwork?: boolean;
 }
 
 /**
@@ -32,6 +35,8 @@ export async function runScan(
     concurrency: opts.concurrency,
     minDelayMs: opts.minDelayMs,
     timeoutMs: opts.timeoutMs,
+    signal: opts.signal,
+    allowPrivateNetwork: opts.allowPrivateNetwork,
   });
   const ctx: CheckerContext = { baseUrl, http };
 
@@ -44,15 +49,17 @@ export async function runScan(
         log(
           `  [${checker.name}] ${findings.length} finding${findings.length === 1 ? "" : "s"}`
         );
-        return findings;
+        return { findings, error: undefined };
       } catch (err) {
+        if (opts.signal?.aborted) throw err;
         log(`  [${checker.name}] error: ${(err as Error).message}`);
-        return [] as Finding[];
+        return { findings: [] as Finding[], error: { checker: checker.name, message: sanitizeError(err) } };
       }
     })
-  );
+  ).finally(() => http.close());
 
-  const deduped = dedupe(results.flat());
+  const deduped = dedupe(results.flatMap((result) => result.findings).map(sanitizeFinding));
+  const errors = results.flatMap((result) => result.error ? [result.error] : []);
   log(`Aggregated ${deduped.length} unique finding(s).`);
 
   let triaged: TriagedFinding[];
@@ -82,7 +89,13 @@ export async function runScan(
     triageMode,
     summary: summarize(triaged),
     findings: triaged,
+    errors,
   };
+}
+
+function sanitizeError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return redactText(message.replace(/[\r\n]+/g, " "), 300);
 }
 
 function dedupe(findings: Finding[]): Finding[] {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as path from "path";
-import { loadAllowlist, assertAuthorized, AllowlistError } from "./allowlist";
+import { loadAllowlist, assertAuthorized, isPrivateNetworkAuthorized, AllowlistError } from "./allowlist";
 import { ensureAuthorizationAck } from "./ack";
 import { runScan } from "./orchestrator";
 import { printReport, writeReports } from "./report";
@@ -16,7 +16,7 @@ interface Args {
   iAmAuthorized: boolean;
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const args: Args = {
     command: argv[0] ?? "help",
     concurrency: 2,
@@ -31,13 +31,26 @@ function parseArgs(argv: string[]): Args {
     const a = rest[i];
     if (a === "--i-am-authorized") args.iAmAuthorized = true;
     else if (a === "--no-triage") args.triage = false;
-    else if (a === "--concurrency") args.concurrency = Number(rest[++i]);
-    else if (a === "--delay") args.delay = Number(rest[++i]);
-    else if (a === "--timeout") args.timeout = Number(rest[++i]);
-    else if (a === "--out") args.outDir = rest[++i];
-    else if (!a.startsWith("--") && !args.target) args.target = a;
+    else if (a === "--concurrency") args.concurrency = readNumber(rest, ++i, a, 1, 8);
+    else if (a === "--delay") args.delay = readNumber(rest, ++i, a, 50, 10_000);
+    else if (a === "--timeout") args.timeout = readNumber(rest, ++i, a, 1_000, 30_000);
+    else if (a === "--out") {
+      if (!rest[++i]) throw new Error("--out requires a directory");
+      args.outDir = rest[i];
+    }
+    else if (a.startsWith("--")) throw new Error(`Unknown option: ${a}`);
+    else if (!args.target) args.target = a;
+    else throw new Error(`Unexpected argument: ${a}`);
   }
   return args;
+}
+
+function readNumber(rest: string[], i: number, name: string, min: number, max: number): number {
+  const value = Number(rest[i]);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}`);
+  }
+  return value;
 }
 
 function printHelp(): void {
@@ -71,7 +84,13 @@ The default allowlist contains only localhost and the bundled demo target.
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  let args: Args;
+  try { args = parseArgs(process.argv.slice(2)); }
+  catch (err) {
+    process.stderr.write(`Error: ${(err as Error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
 
   if (args.command === "help" || args.command === "--help" || args.command === "-h") {
     printHelp();
@@ -94,8 +113,9 @@ async function main(): Promise<void> {
 
   // 1. Allowlist gate (hard refuse for non-allowlisted hosts).
   let baseUrl: string;
+  let allowlist: string[];
   try {
-    const allowlist = loadAllowlist();
+    allowlist = loadAllowlist();
     baseUrl = assertAuthorized(args.target, allowlist);
   } catch (err) {
     if (err instanceof AllowlistError) {
@@ -108,7 +128,7 @@ async function main(): Promise<void> {
 
   // 2. Authorization acknowledgement (first run / --i-am-authorized).
   try {
-    await ensureAuthorizationAck({ flagPassed: args.iAmAuthorized });
+    await ensureAuthorizationAck({ flagPassed: args.iAmAuthorized, target: baseUrl, allowlist });
   } catch (err) {
     process.stderr.write(`\n${(err as Error).message}\n\n`);
     process.exitCode = 4;
@@ -116,18 +136,33 @@ async function main(): Promise<void> {
   }
 
   // 3. Run the swarm.
+  const controller = new AbortController();
+  const cancel = () => controller.abort(new Error("Scan cancelled by operator"));
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
   const report = await runScan(baseUrl, {
     concurrency: args.concurrency,
     minDelayMs: args.delay,
     timeoutMs: args.timeout,
     triage: args.triage,
     onProgress: (msg) => process.stderr.write(`${msg}\n`),
+    signal: controller.signal,
+    allowPrivateNetwork: isPrivateNetworkAuthorized(baseUrl, allowlist),
+  }).finally(() => {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
   });
 
   // 4. Report.
   printReport(report);
   const paths = writeReports(report, args.outDir);
   process.stdout.write(`Wrote ${paths.json}\nWrote ${paths.html}\n`);
+
+  if (report.errors.length > 0) {
+    process.stderr.write(`Scan incomplete: ${report.errors.length} checker(s) failed.\n`);
+    process.exitCode = 5;
+    return;
+  }
 
   // Non-zero exit if any high/critical finding, so CI can gate on it.
   if (report.summary.critical > 0 || report.summary.high > 0) {

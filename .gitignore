@@ -13,3 +13,6 @@ build/
 report.json
 report.html
 .docker-build.log
+.tmp/*
+!.tmp/.gitkeep
+!.tmp/.gitignore

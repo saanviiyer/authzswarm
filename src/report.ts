@@ -27,6 +27,10 @@ export function printReport(report: ScanReport): void {
       s.medium
     )}  ${sev("low", s.low)}  ${sev("info", s.info)}\n`
   );
+  if (report.errors.length > 0) {
+    out.write(`\n${SEVERITY_COLORS.medium} INCOMPLETE ${RESET} ${report.errors.length} checker(s) failed:\n`);
+    for (const error of report.errors) out.write(`  - ${error.checker}: ${error.message}\n`);
+  }
 
   if (report.findings.length === 0) {
     out.write(`\n${BOLD}No findings.${RESET}\n\n`);
@@ -59,9 +63,15 @@ export function writeReports(report: ScanReport, outDir: string): { json: string
   fs.mkdirSync(outDir, { recursive: true });
   const jsonPath = path.join(outDir, "report.json");
   const htmlPath = path.join(outDir, "report.html");
-  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2));
-  fs.writeFileSync(htmlPath, renderHtml(report));
+  atomicWrite(jsonPath, JSON.stringify(report, null, 2));
+  atomicWrite(htmlPath, renderHtml(report));
   return { json: jsonPath, html: htmlPath };
+}
+
+function atomicWrite(destination: string, contents: string): void {
+  const temp = `${destination}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, contents, { mode: 0o600 });
+  fs.renameSync(temp, destination);
 }
 
 function esc(s: string): string {
@@ -136,6 +146,7 @@ function renderHtml(report: ScanReport): string {
     <span class="pill low">low: ${s.low}</span>
     <span class="pill info">info: ${s.info}</span>
   </div>
+  ${report.errors.length ? `<div class="note"><strong>Incomplete scan:</strong> ${report.errors.map((e) => `${esc(e.checker)}: ${esc(e.message)}`).join("; ")}</div>` : ""}
   ${
     report.findings.length === 0
       ? "<p>No findings.</p>"

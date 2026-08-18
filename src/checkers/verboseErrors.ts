@@ -37,10 +37,7 @@ export const verboseErrorsChecker: Checker = {
             category: this.category,
             severity: "medium",
             title: `Verbose error response leaks ${sig.what}`,
-            evidence: `GET ${res.url} returned status ${res.status} containing a ${sig.what}. Snippet: ${res.body
-              .slice(0, 160)
-              .replace(/\s+/g, " ")
-              .trim()}`,
+            evidence: `GET ${res.url} returned status ${res.status} containing a ${sig.what}. Response content omitted to avoid recording sensitive details.`,
             recommendation:
               "Return generic error pages in production and log details server-side. Do not expose stack traces, tracebacks, or filesystem paths to clients.",
             url: res.url,

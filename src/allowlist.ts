@@ -41,11 +41,23 @@ export function assertAuthorized(rawTarget: string, allowlist: string[]): string
     throw new AllowlistError(`Target "${rawTarget}" is not a valid URL or host.`);
   }
 
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new AllowlistError(`Target protocol must be http or https.`);
+  }
+  if (url.username || url.password) {
+    throw new AllowlistError(`Target URLs must not contain credentials.`);
+  }
+  if (url.pathname !== '/' || url.search || url.hash) {
+    throw new AllowlistError(`Target must be an origin only (scheme, host, and optional port).`);
+  }
+
   const host = url.hostname.toLowerCase();
   const hostPort = url.port ? `${host}:${url.port}` : host;
 
-  const authorized =
-    allowlist.includes(host) || allowlist.includes(hostPort);
+  const authorized = allowlist.some((entry) => {
+    const value = entry.startsWith("private:") ? entry.slice("private:".length) : entry;
+    return value === host || value === hostPort;
+  });
 
   if (!authorized) {
     throw new AllowlistError(
@@ -65,7 +77,14 @@ export function assertAuthorized(rawTarget: string, allowlist: string[]): string
   }
 
   // Return a normalized base URL (scheme + host + optional port, no trailing slash).
-  const scheme = url.protocol.replace(":", "") || "http";
+  const scheme = url.protocol.replace(":", "");
   const portPart = url.port ? `:${url.port}` : "";
   return `${scheme}://${host}${portPart}`;
+}
+
+/** Private DNS is opt-in per allowlist entry; IP literals and localhost are already explicit. */
+export function isPrivateNetworkAuthorized(baseUrl: string, allowlist: string[]): boolean {
+  const url = new URL(baseUrl);
+  const hostPort = url.port ? `${url.hostname.toLowerCase()}:${url.port}` : url.hostname.toLowerCase();
+  return allowlist.includes(`private:${hostPort}`) || allowlist.includes(`private:${url.hostname.toLowerCase()}`);
 }

@@ -31,9 +31,10 @@
   ],
   "scripts": {
     "build": "tsc",
-    "demo:target": "tsx demo-target/server.ts",
+    "test": "mkdir -p .tmp && TMPDIR=$PWD/.tmp npm run build && TMPDIR=$PWD/.tmp node --test dist/test/*.test.js",
+    "demo:target": "npm run build && node dist/demo-target/server.js",
     "scan": "tsx src/cli.ts",
-    "demo": "tsx scripts/demo.ts",
+    "demo": "npm run build && node dist/scripts/demo.js",
     "start": "node dist/src/cli.js",
     "prepare": "tsc",
     "prepublishOnly": "tsc"
