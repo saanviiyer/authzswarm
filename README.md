@@ -5,8 +5,8 @@
 
 A multi-agent, **authorized-defensive-security** testing harness. Point it at an
 application **you own** to find common web vulnerabilities before an attacker
-does. It coordinates a swarm of specialized checker agents — each probing one
-class of well-known issue — against an authorized target, then produces a
+does. It coordinates a swarm of specialized checker agents. Each probing one
+class of well-known issue, against an authorized target, then produces a
 consolidated, ranked findings report in the terminal, as `report.json`, and as a
 readable `report.html`.
 
@@ -28,7 +28,7 @@ exploit.**
 ## What it checks
 
 Each checker is an independent agent probing one class of **common, well-known**
-web issue. They **detect and report** — no exploit payloads, no brute-forcing,
+web issue. They **detect and report**, no exploit payloads, no brute-forcing,
 no credential stuffing, nothing designed to damage or persist.
 
 | Agent | Looks for |
@@ -51,7 +51,7 @@ no credential stuffing, nothing designed to damage or persist.
    file.
 
 2. **Target-bound authorization acknowledgement.** You must confirm you own or
-   are authorized to test the selected target — either interactively, or with
+   are authorized to test the selected target, either interactively, or with
    `--i-am-authorized`. The local acknowledgement is bound to that exact origin
    and a digest of the current allowlist. Changing either requires confirmation
    again. The record is written atomically with owner-only permissions.
@@ -134,7 +134,7 @@ docker run --rm authzswarm scan http://host.docker.internal:3000 --i-am-authoriz
 
 The image ships the **default** `authorized-targets.json`, which allows **only**
 `localhost` / `127.0.0.1` / the bundled demo target. **The allowlist gate is
-fully enforced inside the container** — any host not on the mounted allowlist is
+fully enforced inside the container**, any host not on the mounted allowlist is
 hard-refused before a single request is sent. To scan your own hosts, mount your
 own allowlist (and a reports volume) over the defaults:
 
@@ -146,7 +146,7 @@ docker run --rm \
 ```
 
 Because the container is non-interactive (no TTY), the one-time authorization
-acknowledgement cannot be prompted for — pass `--i-am-authorized` to confirm you
+acknowledgement cannot be prompted for, pass `--i-am-authorized` to confirm you
 own or are explicitly authorized to test the allowlisted target(s).
 
 ## Run the demo (end-to-end, offline)
@@ -156,7 +156,7 @@ The repo bundles a tiny, intentionally-vulnerable Express app in `demo-target/`
 `/.git/config`, an open redirect, verbose errors). It binds to `localhost` only
 and is on the default allowlist.
 
-**One command — starts the target, scans it, prints the report, shuts down:**
+**One command, starts the target, scans it, prints the report, shuts down:**
 
 ```bash
 npm run demo
@@ -184,7 +184,7 @@ node dist/src/cli.js scan http://localhost:3000 --i-am-authorized
 
 ## Point it at your own app
 
-1. Add your host to `authorized-targets.json` — **only** hosts you own or are
+1. Add your host to `authorized-targets.json`, **only** hosts you own or are
    authorized to test:
 
    ```json
@@ -237,7 +237,7 @@ re-prioritize them.
 - **Without a key (MOCK MODE):** triage falls back to deterministic
   severity-based prioritization, so the tool runs end-to-end with zero setup.
 
-Triage never drops a finding — any gap in the model's response is backfilled from
+Triage never drops a finding, any gap in the model's response is backfilled from
 the deterministic scoring.
 
 ## Output
