@@ -1,216 +1,76 @@
-# AuthzSwarm
+# authzswarm
 
-> Runs a swarm of security checks against your own apps and reports the bugs it finds.
+AuthzSwarm runs a set of security checks against web apps you own and reports the common bugs it finds. It is a defensive testing tool. It detects and reports issues. It does not exploit them.
 
-
-A multi-agent, **authorized-defensive-security** testing harness. Point it at an
-application **you own** to find common web vulnerabilities before an attacker
-does. It coordinates a swarm of specialized checker agents. Each probing one
-class of well-known issue, against an authorized target, then produces a
-consolidated, ranked findings report in the terminal, as `report.json`, and as a
-readable `report.html`.
-
-Think of it as a personal DAST / pentest orchestrator: **detect-and-report, not
-exploit.**
-
----
-
-> ## ⚠️ AUTHORIZED-USE ONLY
->
-> **Only run AuthzSwarm against systems you OWN or are EXPLICITLY AUTHORIZED to
-> test. Do not use it on systems you do not own.** Scanning systems without
-> permission may be illegal. AuthzSwarm enforces this in code: it refuses to scan
-> any host that is not on your `authorized-targets.json` allowlist, and it
-> requires a one-time authorization acknowledgement before it will run.
-
----
+> **Authorized use only.** Run AuthzSwarm only against systems you own or have explicit permission to test. Do not use it on systems you do not own. Scanning systems without permission may be illegal. The code enforces this rule. It refuses any host that is not in your `authorized-targets.json` allowlist, and it requires an authorization acknowledgement before it runs.
 
 ## What it checks
 
-Each checker is an independent agent probing one class of **common, well-known**
-web issue. They **detect and report**, no exploit payloads, no brute-forcing,
-no credential stuffing, nothing designed to damage or persist.
+Each checker probes one class of common, well-known web issue. The checkers send no exploit payloads. They do no brute-forcing or credential stuffing, and they do nothing designed to damage or persist.
 
-| Agent | Looks for |
+| Checker | Looks for |
 |---|---|
 | `security-headers` | Missing CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS |
-| `cookie-flags` | Cookies set without `Secure` / `HttpOnly` |
-| `reflected-input` | Reflected, un-encoded input points (reflected-XSS precondition) via a benign marker |
+| `cookie-flags` | Cookies set without `Secure` or `HttpOnly` |
+| `reflected-input` | Reflected, unencoded input (a reflected-XSS precondition), found with a benign marker |
 | `exposed-paths` | Exposed `.env`, `.git/config`, backup archives, credentials, config files |
 | `directory-listing` | Auto-generated directory index pages |
-| `tls-basics` | Plaintext HTTP, HTTPS without HSTS |
-| `verbose-errors` | Stack traces / tracebacks / SQL errors / filesystem paths leaked in error responses |
-| `open-redirect` | Redirect parameters that send users to an arbitrary external URL (benign sentinel, redirect not followed) |
+| `tls-basics` | Plaintext HTTP, and HTTPS without HSTS |
+| `verbose-errors` | Stack traces, SQL errors or filesystem paths in error responses |
+| `open-redirect` | Redirect parameters that send users to any external URL (benign sentinel, redirect not followed) |
 
-## How the safety controls work
+The tool merges and ranks the findings. It prints them in the terminal and writes `report.json` and `report.html` to `reports/scan-<timestamp>/`.
 
-1. **Allowlist gate.** AuthzSwarm reads `authorized-targets.json` and **hard-refuses**
-   any target whose host is not listed. The shipped default contains only
-   `localhost` / `127.0.0.1` / the bundled demo target. A host matches by
-   hostname, or by `hostname:port` for a port-specific grant. You maintain this
-   file.
+## Safety controls
 
-2. **Target-bound authorization acknowledgement.** You must confirm you own or
-   are authorized to test the selected target, either interactively, or with
-   `--i-am-authorized`. The local acknowledgement is bound to that exact origin
-   and a digest of the current allowlist. Changing either requires confirmation
-   again. The record is written atomically with owner-only permissions.
+1. **Allowlist gate.** The tool reads `authorized-targets.json` and refuses any host that is not listed. The default file lists only `localhost`, `127.0.0.1` and the bundled demo target. An entry matches a hostname, or `hostname:port` for a port-specific grant. You maintain this file.
+2. **Authorization acknowledgement.** You confirm that you own or may test the target, either at an interactive prompt or with `--i-am-authorized`. The record is bound to that origin and to a digest of the current allowlist. A change to either one asks for confirmation again. The tool writes the record atomically with owner-only permissions.
+3. **Network containment.** All requests stay on the authorized origin. The tool never follows redirects to another origin. It resolves DNS once and pins the result for the scan to prevent rebinding. It caps response body size and redirect depth. It rejects non-public DNS results unless you gave the target as localhost or an IP literal, or added a `private:` grant for it.
+4. **Rate limits.** The HTTP client uses 2 concurrent requests and a 250 ms minimum delay by default. It allows at most 8 concurrent requests and at most 100 requests per scan. Delay and timeout inputs have hard bounds.
+5. **Redacted reports.** The tool redacts common credentials, cookie values and sensitive query parameters before terminal output, report files or LLM triage. If a checker fails, the tool marks the scan incomplete and exits non-zero. It does not report a false clean result.
 
-3. **Network containment.** Every request stays on the authorized origin.
-   Redirects to another origin are never followed, DNS is resolved once and
-   pinned for the scan to prevent rebinding, response bodies and redirect depth
-   are capped, and non-public DNS results are rejected unless the target was
-   explicitly given as localhost/an IP literal or has a per-target `private:`
-   allowlist grant.
+These controls apply the same way to a local checkout, a global install and the Docker image.
 
-4. **Rate limiting / politeness.** The HTTP client throttles itself: a low
-   default concurrency (2 in-flight requests) and a minimum delay between
-   requests (250ms), at most 8 concurrent requests, and at most 100 requests per
-   scan. Delay and timeout inputs also have hard safe bounds.
+## Run it
 
-5. **Redacted, honest reporting.** Common credentials, cookie values, and
-   sensitive query parameters are redacted before terminal output, files, or
-   optional LLM triage. A checker failure marks the scan incomplete and exits
-   non-zero instead of reporting a misleading clean result.
-
-## Requirements
-
-- Node.js 20+ (uses the built-in global `fetch`)
-
-## Install
-
-> **Whichever way you install it, the safety controls travel with it.** The
-> allowlist gate, the one-time authorization acknowledgement, the polite
-> throttling, and the detect-and-report-only scope are enforced in code and are
-> identical for a local checkout, a global install, and the Docker image. A
-> globally-installed or containerized AuthzSwarm still hard-refuses any host that
-> is not on **your** `authorized-targets.json`.
-
-### From source (local checkout)
+You need Node.js 20 or later.
 
 ```bash
-npm install        # installs deps and builds dist/ via the prepare hook
-npm run build      # (re)compile TypeScript -> dist/ if needed
+git clone https://github.com/saanviiyer/authzswarm
+cd authzswarm
+npm install        # also builds dist/ through the prepare hook
+npm test
 ```
 
-### Global CLI (`authzswarm` on your PATH)
+### Demo
 
-Install the compiled CLI globally so you can run `authzswarm` from anywhere:
+The `demo-target/` folder holds a small Express app with known issues on purpose. It listens on `127.0.0.1` only and is on the default allowlist.
 
 ```bash
-# from inside the repo
-npm install -g .        # or: npm link   (symlinks it for local development)
-
-authzswarm --help
-authzswarm scan http://localhost:3000 --i-am-authorized
+npm run demo       # starts the target, scans it, prints the report, stops
 ```
 
-`npm install -g .` builds `dist/` (via the `prepare` hook) and puts an
-`authzswarm` executable on your PATH. The published package's `files` field ships
-only `dist/`, the bundled `demo-target/`, the default `authorized-targets.json`,
-this README, and `.env.example`.
+To run the two parts yourself, start `npm run demo:target` in one terminal. Then run `npm run scan -- http://localhost:3000 --i-am-authorized` in a second terminal.
 
-**Important:** the allowlist and the acknowledgement record are read from your
-**current working directory**. When you run the global CLI from your own
-project, keep an `authorized-targets.json` there listing ONLY hosts you own or
-are authorized to test. If none is found, AuthzSwarm refuses to run.
+### Scan your own app
 
-### Docker
+Add only hosts you own or may test to `authorized-targets.json`:
 
-A multi-stage `Dockerfile` builds the TypeScript in a full Node image and runs
-the scanner from a slim runtime image. The scanner is the container entrypoint.
+```json
+{
+  "allowedTargets": ["localhost", "staging.myapp.example.com"]
+}
+```
+
+For an authorized internal hostname that resolves to a private address, add an entry such as `"private:staging.internal.example:8443"`. This grant applies to that hostname and port only. It does not weaken the redirect or DNS pinning controls.
 
 ```bash
-# Build the image
-docker build -t authzswarm .
-
-# Show help (default command)
-docker run --rm authzswarm
-
-# Scan the bundled demo target from inside the container.
-# (host.docker.internal reaches a demo target running on your host)
-docker run --rm authzswarm scan http://host.docker.internal:3000 --i-am-authorized
+npm run scan -- https://staging.myapp.example.com --i-am-authorized
 ```
 
-The image ships the **default** `authorized-targets.json`, which allows **only**
-`localhost` / `127.0.0.1` / the bundled demo target. **The allowlist gate is
-fully enforced inside the container**, any host not on the mounted allowlist is
-hard-refused before a single request is sent. To scan your own hosts, mount your
-own allowlist (and a reports volume) over the defaults:
+For a host that is not on the allowlist, the tool prints `REFUSING TO SCAN: "example.com" is not on the allowlist.` and sends no requests.
 
-```bash
-docker run --rm \
-  -v "$(pwd)/authorized-targets.json:/app/authorized-targets.json:ro" \
-  -v "$(pwd)/reports:/app/reports" \
-  authzswarm scan https://staging.myapp.example.com --i-am-authorized
-```
-
-Because the container is non-interactive (no TTY), the one-time authorization
-acknowledgement cannot be prompted for, pass `--i-am-authorized` to confirm you
-own or are explicitly authorized to test the allowlisted target(s).
-
-## Run the demo (end-to-end, offline)
-
-The repo bundles a tiny, intentionally-vulnerable Express app in `demo-target/`
-(missing headers, an insecure cookie, reflected params, exposed `/.env` and
-`/.git/config`, an open redirect, verbose errors). It binds to `localhost` only
-and is on the default allowlist.
-
-**One command, starts the target, scans it, prints the report, shuts down:**
-
-```bash
-npm run demo
-```
-
-**Or run the two halves yourself:**
-
-```bash
-# Terminal 1: start the vulnerable demo target
-npm run demo:target
-
-# Terminal 2: scan it
-npm run scan -- http://localhost:3000 --i-am-authorized
-```
-
-Either way you get a ranked report in the terminal plus `report.json` and
-`report.html` under `reports/`.
-
-## Build
-
-```bash
-npm run build      # tsc -> dist/
-node dist/src/cli.js scan http://localhost:3000 --i-am-authorized
-```
-
-## Point it at your own app
-
-1. Add your host to `authorized-targets.json`, **only** hosts you own or are
-   authorized to test:
-
-   ```json
-   {
-     "allowedTargets": ["localhost", "staging.myapp.example.com"]
-   }
-   ```
-
-   For an authorized internal hostname that resolves to a private address, use
-   an explicit entry such as `"private:staging.internal.example:8443"`. This
-   exception applies only to that hostname/port and does not weaken redirect or
-   DNS pinning controls.
-
-2. Run the scan:
-
-   ```bash
-   npm run scan -- https://staging.myapp.example.com --i-am-authorized
-   ```
-
-If you point it at a host that is not on the allowlist, it refuses:
-
-```
-REFUSING TO SCAN: "example.com" is not on the allowlist.
-```
-
-## CLI options
+### CLI options
 
 ```
 authzswarm scan <target-url> [options]
@@ -219,58 +79,67 @@ authzswarm scan <target-url> [options]
   --concurrency <n>     Max concurrent requests (default 2)
   --delay <ms>          Min delay between requests (default 250)
   --timeout <ms>        Per-request timeout (default 10000)
-  --no-triage           Skip the triage/prioritization step
-  --out <dir>           Output directory for report.json / report.html
+  --no-triage           Skip the triage step
+  --out <dir>           Output directory (default reports/scan-<timestamp>)
 ```
 
-The process exits non-zero when any `high` or `critical` finding is present, or
-when a checker fails and the scan is incomplete, so you can gate CI on it.
+The process exits non-zero when it finds a `high` or `critical` issue, or when a checker fails. You can use this exit code to gate CI.
 
-## LLM-assisted triage (optional)
+### Global install
 
-After aggregating findings, AuthzSwarm can use Claude to summarize and
-re-prioritize them.
-
-- **With a key:** copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY`.
-  Triage uses `claude-sonnet-5` (override with `AUTHZSWARM_TRIAGE_MODEL`). The
-  `ANTHROPIC_API_KEY` environment variable is read automatically.
-- **Without a key (MOCK MODE):** triage falls back to deterministic
-  severity-based prioritization, so the tool runs end-to-end with zero setup.
-
-Triage never drops a finding, any gap in the model's response is backfilled from
-the deterministic scoring.
-
-## Output
-
-- **Terminal:** colorized, severity-ranked findings.
-- **`report.json`:** full structured report (target, timings, checkers run,
-  triage mode, per-severity summary, all findings with priority + triage notes).
-- **`report.html`:** a shareable, theme-aware HTML table of the same.
-
-## Project layout
-
-```
-authzswarm/
-  authorized-targets.json   # the allowlist (localhost + demo only by default)
-  src/
-    cli.ts                  # entry point + arg parsing
-    allowlist.ts            # allowlist gate (hard refuse)
-    ack.ts                  # authorization acknowledgement
-    http.ts                 # throttled, polite HTTP client
-    orchestrator.ts         # fan-out, aggregate/dedupe, triage, rank
-    triage.ts               # Claude-assisted triage w/ mock fallback
-    report.ts               # terminal + JSON + HTML reports
-    types.ts                # shared types
-    checkers/               # one module per issue class (the swarm)
-  demo-target/
-    server.ts               # bundled intentionally-vulnerable Express app
-  scripts/
-    demo.ts                 # one-command demo runner
+```bash
+npm install -g .   # or: npm link
+authzswarm scan http://localhost:3000 --i-am-authorized
 ```
 
-## Scope & non-goals
+The global CLI reads the allowlist and the acknowledgement record from the current working directory. Keep an `authorized-targets.json` in your project that lists only hosts you own or may test. If the tool finds no allowlist, it refuses to run.
 
-AuthzSwarm probes for common, well-known issue classes and reports them. It does
-**not** implement exploit payloads, credential stuffing, brute-forcing, or
-anything designed to damage or persist. It is defensive tooling for use on your
-own systems.
+### Docker
+
+```bash
+docker build -t authzswarm .
+docker run --rm authzswarm scan http://host.docker.internal:3000 --i-am-authorized
+```
+
+The image ships the default allowlist, and the allowlist gate works inside the container. To scan your own hosts, mount your own allowlist and a reports folder:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/authorized-targets.json:/app/authorized-targets.json:ro" \
+  -v "$(pwd)/reports:/app/reports" \
+  authzswarm scan https://staging.myapp.example.com --i-am-authorized
+```
+
+The container has no TTY and cannot show the prompt. Pass `--i-am-authorized` to confirm that you own or may test the allowlisted targets.
+
+## Environment variables
+
+Copy `.env.example` to `.env`. The tool runs without any of these. With no API key, triage uses deterministic severity-based ranking (mock mode).
+
+| Name | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Optional | Turns on Claude triage of findings |
+| `AUTHZSWARM_TRIAGE_MODEL` | Optional | Model for triage (default `claude-sonnet-5`) |
+| `PORT` | Optional | Port for the demo target and demo script (default 3000) |
+
+Triage never drops a finding. If the model response leaves a gap, the tool fills it from the deterministic scores.
+
+## Layout
+
+```
+authorized-targets.json   allowlist (localhost and demo only by default)
+src/cli.ts                entry point and argument parsing
+src/allowlist.ts          allowlist gate
+src/ack.ts                authorization acknowledgement
+src/http.ts               throttled HTTP client
+src/redact.ts             redaction of secrets in output
+src/orchestrator.ts       runs checkers, merges and ranks findings
+src/triage.ts             Claude triage with mock fallback
+src/report.ts             terminal, JSON and HTML reports
+src/checkers/             one module per issue class
+demo-target/server.ts     demo Express app with known issues
+scripts/demo.ts           one-command demo runner
+test/                     security tests
+```
+
+License: MIT (see `package.json`).
